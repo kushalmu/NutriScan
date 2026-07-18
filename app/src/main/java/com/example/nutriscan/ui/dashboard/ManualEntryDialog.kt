@@ -49,7 +49,17 @@ fun ManualEntryDialog(onDismiss: () -> Unit) {
     var selectedFood by remember { mutableStateOf<FoodItemEntity?>(null) }
     var quantity by remember { mutableIntStateOf(1) }
     
-    // Automatically search when query changes (with simple debounce by coroutine)
+    // Pre-populate data if missing (e.g. missed during migration)
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val allFoods = db.mealDao().searchFoodItemsList("")
+            if (allFoods.isEmpty()) {
+                db.mealDao().insertFoodItems(com.example.nutriscan.data.local.FoodData.foods)
+            }
+        }
+    }
+
+    // Automatically search when query changes
     LaunchedEffect(searchQuery) {
         if (searchQuery.isNotBlank()) {
             val results = withContext(Dispatchers.IO) {
