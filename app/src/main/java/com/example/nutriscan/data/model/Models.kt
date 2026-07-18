@@ -79,12 +79,12 @@ data class MealEntry(
     val totalFiber: Float get() = items.sumOf { it.fiberG.toDouble() }.toFloat()
 }
 
-enum class MealType(val displayName: String, val emoji: String) {
-    BREAKFAST("Breakfast", "🌅"),
-    MORNING_SNACK("Morning Snack", "🍎"),
-    LUNCH("Lunch", "☀️"),
-    EVENING_SNACK("Evening Snack", "🫖"),
-    DINNER("Dinner", "🌙"),
+enum class MealType(val displayName: String) {
+    BREAKFAST("Breakfast"),
+    MORNING_SNACK("Morning Snack"),
+    LUNCH("Lunch"),
+    EVENING_SNACK("Evening Snack"),
+    DINNER("Dinner")
 }
 
 // === Daily Summary ===

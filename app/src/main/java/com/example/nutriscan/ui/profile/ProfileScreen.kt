@@ -319,7 +319,7 @@ fun ProfileScreen(
 
             if (showSavedMessage) {
                 Text(
-                    "✅ Profile saved! Your calorie targets will be updated.",
+                    "Profile saved! Your calorie targets will be updated.",
                     style = MaterialTheme.typography.bodySmall,
                     color = SuccessGreen,
                     modifier = Modifier.padding(top = 8.dp),

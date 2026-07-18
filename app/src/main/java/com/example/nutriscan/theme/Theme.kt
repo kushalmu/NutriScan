@@ -32,7 +32,7 @@ private val LightColorScheme = lightColorScheme(
     onPrimaryContainer = DeepCharcoal,
     secondary = OliveGreen,
     onSecondary = SurfaceWhite,
-    background = SoftBeige,
+    background = SurfaceWhite, // Changed from SoftBeige to pure white
     onBackground = DeepCharcoal,
     surface = SurfaceWhite,
     onSurface = DeepCharcoal,
@@ -43,17 +43,11 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun NutriScanTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Keep disabled to use our custom Claude theme
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    // Force Light Theme unconditionally for a cleaner aesthetic
+    val colorScheme = LightColorScheme
 
     MaterialTheme(
         colorScheme = colorScheme,

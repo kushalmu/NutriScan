@@ -23,4 +23,7 @@ interface MealDao {
 
     @Query("SELECT * FROM food_items WHERE foodName LIKE '%' || :query || '%' LIMIT 1")
     fun searchFoodItem(query: String): FoodItemEntity?
+
+    @Query("SELECT * FROM food_items WHERE foodName LIKE '%' || :query || '%'")
+    fun searchFoodItemsList(query: String): List<FoodItemEntity>
 }

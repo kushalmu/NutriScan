@@ -2,6 +2,10 @@ package com.example.nutriscan.ui.scanner
 
 import android.Manifest
 import android.graphics.Bitmap
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageCapture
@@ -20,7 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +42,7 @@ import androidx.core.content.ContextCompat
 import com.example.nutriscan.data.model.NutritionInfo
 import com.example.nutriscan.data.network.OfflineScanner
 import com.example.nutriscan.theme.*
+import com.example.nutriscan.ui.dashboard.ManualEntryDialog
 import kotlinx.coroutines.launch
 
 enum class ScannerState {
@@ -66,8 +71,45 @@ fun ScannerScreen(
     var scanResult by remember { mutableStateOf<NutritionInfo?>(null) }
     var errorMessage by remember { mutableStateOf("") }
     
+    var showManualEntry by remember { mutableStateOf(false) }
+
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     val offlineScanner = remember { OfflineScanner(context) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val source = ImageDecoder.createSource(context.contentResolver, it)
+                    ImageDecoder.decodeBitmap(source)
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaStore.Images.Media.getBitmap(context.contentResolver, it)
+                }
+                
+                // Ensure it's mutable/software for MLKit
+                val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                capturedBitmap = softwareBitmap
+                scannerState = ScannerState.ANALYZING
+                
+                coroutineScope.launch {
+                    val result = offlineScanner.analyzeFoodImage(softwareBitmap)
+                    result.onSuccess { info ->
+                        scanResult = info
+                        scannerState = ScannerState.RESULT
+                    }.onFailure { err ->
+                        errorMessage = err.message ?: "Analysis failed"
+                        scannerState = ScannerState.ERROR
+                    }
+                }
+            } catch (e: Exception) {
+                errorMessage = "Failed to load image from gallery."
+                scannerState = ScannerState.ERROR
+            }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -165,8 +207,15 @@ fun ScannerScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.padding(24.dp)
                         ) {
+                            Icon(
+                                Icons.Rounded.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "Oops!",
+                                "Food Not Recognized",
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -176,9 +225,14 @@ fun ScannerScreen(
                                 textAlign = TextAlign.Center,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { scannerState = ScannerState.IDLE }) {
-                                Text("Try Again")
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                OutlinedButton(onClick = { showManualEntry = true }) {
+                                    Text("Add Manually")
+                                }
+                                Button(onClick = { scannerState = ScannerState.IDLE }) {
+                                    Text("Try Again")
+                                }
                             }
                         }
                     }
@@ -263,13 +317,24 @@ fun ScannerScreen(
                         icon = Icons.Rounded.Image,
                         label = "Gallery",
                         color = TerracottaLight,
-                        onClick = { /* Future */ },
+                        onClick = {
+                            if (scannerState == ScannerState.IDLE || scannerState == ScannerState.ERROR) {
+                                galleryLauncher.launch("image/*")
+                            }
+                        },
                     )
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(80.dp))
+    }
+
+    if (showManualEntry) {
+        ManualEntryDialog(onDismiss = {
+            showManualEntry = false
+            scannerState = ScannerState.IDLE // Reset scanner state after manual entry
+        })
     }
 }
 

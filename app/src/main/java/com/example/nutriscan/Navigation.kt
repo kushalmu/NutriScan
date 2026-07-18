@@ -1,5 +1,6 @@
 package com.example.nutriscan
 
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -79,12 +80,26 @@ fun MainNavigation() {
             }
         },
     ) { innerPadding ->
-        // Show the selected screen
-        when (selectedTab) {
-            0 -> DashboardScreen(modifier = Modifier.padding(innerPadding).safeDrawingPadding())
-            1 -> ScannerScreen(modifier = Modifier.padding(innerPadding).safeDrawingPadding())
-            2 -> DietPlanScreen(modifier = Modifier.padding(innerPadding).safeDrawingPadding())
-            3 -> ProfileScreen(modifier = Modifier.padding(innerPadding).safeDrawingPadding())
+        // Show the selected screen with a crossfade/slide animation
+        androidx.compose.animation.AnimatedContent(
+            targetState = selectedTab,
+            transitionSpec = {
+                (androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(220, delayMillis = 90)) +
+                        androidx.compose.animation.scaleIn(initialScale = 0.92f, animationSpec = androidx.compose.animation.core.tween(220, delayMillis = 90)))
+                    .togetherWith(androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(90)))
+            },
+            label = "tab_transition",
+            modifier = Modifier.padding(innerPadding).safeDrawingPadding()
+        ) { targetTab ->
+            when (targetTab) {
+                0 -> DashboardScreen(
+                    modifier = Modifier.fillMaxSize(),
+                    onNavigateToScan = { selectedTab = 1 }
+                )
+                1 -> ScannerScreen(modifier = Modifier.fillMaxSize())
+                2 -> DietPlanScreen(modifier = Modifier.fillMaxSize())
+                3 -> ProfileScreen(modifier = Modifier.fillMaxSize())
+            }
         }
     }
 }
