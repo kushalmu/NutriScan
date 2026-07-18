@@ -1,7 +1,9 @@
 package com.example.nutriscan.ui.dashboard
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -19,12 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.nutriscan.data.model.DailySummary
@@ -35,43 +35,48 @@ import com.example.nutriscan.theme.*
 
 @Composable
 fun DashboardScreen(modifier: Modifier = Modifier) {
-    // Sample data for demonstration — will be replaced with real data later
-    val sampleMeals = listOf(
-        MealEntry(
-            id = "1",
-            mealType = MealType.BREAKFAST,
-            items = listOf(
-                NutritionInfo("Idli (3 pcs)", "ಇಡ್ಲಿ", 150f, 195f, 5.4f, 39f, 0.6f, 1.8f, 0.3f, 280f),
-                NutritionInfo("Sambar", "ಸಾಂಬಾರ್", 150f, 90f, 4.2f, 12f, 2.5f, 3.0f, 2.1f, 450f),
-            ),
-        ),
-        MealEntry(
-            id = "2",
-            mealType = MealType.LUNCH,
-            items = listOf(
-                NutritionInfo("Rice", "ಅಕ್ಕಿ", 200f, 260f, 4.8f, 56f, 0.4f, 0.6f, 0.1f, 2f),
-                NutritionInfo("Bisi Bele Bath", "ಬಿಸಿ ಬೇಳೆ ಬಾತ್", 250f, 320f, 9.5f, 48f, 8.2f, 5.4f, 3.2f, 520f),
-            ),
-        ),
-    )
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val db = remember { com.example.nutriscan.data.local.AppDatabase.getDatabase(context) }
+    val todayDateString = remember { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()) }
+    val dbMeals by db.mealDao().getMealsForDate(todayDateString).collectAsState(initial = emptyList())
+    
+    val converters = remember { com.example.nutriscan.data.local.Converters() }
+    val realMeals = dbMeals.map { entity ->
+        entity.toMealEntry(converters.toNutritionInfoList(entity.itemsJson))
+    }
 
+    val repo = remember { com.example.nutriscan.data.repository.ProfileRepository(context) }
+    
     val dailySummary = DailySummary(
-        date = "2026-07-16",
-        meals = sampleMeals,
-        waterGlasses = 5,
+        date = todayDateString,
+        meals = realMeals,
+        waterGlasses = repo.getWaterCountForToday(),
         targetCalories = 2000f,
     )
 
     var waterCount by remember { mutableIntStateOf(dailySummary.waterGlasses) }
 
+    LaunchedEffect(waterCount) {
+        repo.saveWaterCountForToday(waterCount)
+    }
+
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(24.dp), // Increased padding for softer look
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         // Greeting Header
         item {
             GreetingHeader()
+        }
+
+        // ==========================================
+        // HOMEWORK: DAILY MOTIVATION CARD
+        // ==========================================
+        item {
+            DailyMotivationCard()
         }
 
         // Calorie Progress Ring
@@ -94,13 +99,15 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
             Text(
                 "Today's Meals",
                 style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
             )
         }
 
         // Meal cards
-        items(sampleMeals.size) { index ->
-            MealCard(sampleMeals[index])
+        items(realMeals.size) { index ->
+            MealCard(realMeals[index])
         }
 
         // Bottom spacer for navigation bar
@@ -116,67 +123,109 @@ private fun GreetingHeader() {
         Text(
             text = "Good Evening! 👋",
             style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Text(
             text = "Track your nutrition journey",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
+// ==========================================
+// USER HOMEWORK: FILL THIS IN!
+// ==========================================
 @Composable
-private fun CalorieProgressCard(summary: DailySummary) {
+fun DailyMotivationCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
+                text = "💡 Daily Motivation",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "\"Every healthy choice is a step towards a better you. Keep going!\"",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalorieProgressCard(summary: DailySummary) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(), // Smooth expansion
+        shape = RoundedCornerShape(32.dp), // Softer, pill-like corners
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), // Flat design
+    ) {
+        Column(
+            modifier = Modifier.padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
                 "Daily Calories",
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Animated calorie ring
+            // Animated calorie ring with Spring physics
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(200.dp),
+                modifier = Modifier.size(220.dp),
             ) {
                 val progress by animateFloatAsState(
                     targetValue = summary.calorieProgress,
-                    animationSpec = tween(1000),
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
                     label = "calorie_progress",
                 )
 
-                Canvas(modifier = Modifier.size(200.dp)) {
-                    val strokeWidth = 20.dp.toPx()
+                val primaryColor = MaterialTheme.colorScheme.primary
+                
+                Canvas(modifier = Modifier.size(220.dp)) {
+                    val strokeWidth = 24.dp.toPx()
                     val radius = (size.minDimension - strokeWidth) / 2
                     val center = Offset(size.width / 2, size.height / 2)
 
-                    // Background ring
+                    // Background ring (Soft)
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.3f),
+                        color = primaryColor.copy(alpha = 0.1f),
                         radius = radius,
                         center = center,
                         style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
                     )
 
-                    // Progress arc
+                    // Progress arc (Solid Terracotta, no gradients)
                     val sweepAngle = 360f * progress.coerceAtMost(1f)
                     drawArc(
-                        brush = Brush.sweepGradient(
-                            colors = listOf(NutriGreenLight, NutriGreen, NutriGreenDark),
-                        ),
+                        color = primaryColor,
                         startAngle = -90f,
                         sweepAngle = sweepAngle,
                         useCenter = false,
@@ -190,26 +239,26 @@ private fun CalorieProgressCard(summary: DailySummary) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "${summary.totalCalories.toInt()}",
-                        style = MaterialTheme.typography.displaySmall,
+                        style = MaterialTheme.typography.displayMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         text = "/ ${summary.targetCalories.toInt()} kcal",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             val remaining = (summary.targetCalories - summary.totalCalories).toInt()
             Text(
                 text = if (remaining > 0) "$remaining kcal remaining" else "Target reached! 🎉",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
             )
         }
     }
@@ -219,28 +268,28 @@ private fun CalorieProgressCard(summary: DailySummary) {
 private fun MacroBreakdownCard(summary: DailySummary) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(24.dp)) {
             Text(
                 "Macro Nutrients",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                MacroItem("Protein", summary.totalProtein, "g", ProteinBlue, targetG = 60f)
-                MacroItem("Carbs", summary.totalCarbs, "g", CarbsAmber, targetG = 250f)
-                MacroItem("Fat", summary.totalFat, "g", FatPurple, targetG = 65f)
-                MacroItem("Fiber", summary.totalFiber, "g", FiberGreen, targetG = 30f)
+                MacroItem("Protein", summary.totalProtein, "g", MacroProtein, targetG = 60f)
+                MacroItem("Carbs", summary.totalCarbs, "g", MacroCarbs, targetG = 250f)
+                MacroItem("Fat", summary.totalFat, "g", MacroFat, targetG = 65f)
+                MacroItem("Fiber", summary.totalFiber, "g", MacroFiber, targetG = 30f)
             }
         }
     }
@@ -250,18 +299,21 @@ private fun MacroBreakdownCard(summary: DailySummary) {
 private fun MacroItem(name: String, amount: Float, unit: String, color: Color, targetG: Float) {
     val progress by animateFloatAsState(
         targetValue = (amount / targetG).coerceIn(0f, 1f),
-        animationSpec = tween(800),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "macro_$name",
     )
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(56.dp)) {
-            Canvas(modifier = Modifier.size(56.dp)) {
-                val strokeWidth = 6.dp.toPx()
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp)) {
+            Canvas(modifier = Modifier.size(64.dp)) {
+                val strokeWidth = 8.dp.toPx()
                 val radius = (size.minDimension - strokeWidth) / 2
 
                 drawCircle(
-                    color = color.copy(alpha = 0.2f),
+                    color = color.copy(alpha = 0.15f),
                     radius = radius,
                     style = Stroke(width = strokeWidth),
                 )
@@ -279,21 +331,22 @@ private fun MacroItem(name: String, amount: Float, unit: String, color: Color, t
 
             Text(
                 text = "${amount.toInt()}",
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = color,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = name,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
-            text = "$unit",
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            text = unit,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -302,11 +355,11 @@ private fun MacroItem(name: String, amount: Float, unit: String, color: Color, t
 private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(
             modifier = Modifier
@@ -317,7 +370,7 @@ private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
             // Water icon
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(56.dp)
                     .clip(CircleShape)
                     .background(WaterCyan.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center,
@@ -326,7 +379,7 @@ private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
                     Icons.Rounded.LocalDrink,
                     contentDescription = "Water",
                     tint = WaterCyan,
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(32.dp),
                 )
             }
 
@@ -335,12 +388,12 @@ private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "Water Intake",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
                 )
                 Text(
                     "$count / 8 glasses",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -348,15 +401,16 @@ private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
             // Minus button
             FilledIconButton(
                 onClick = { if (count > 0) onCountChange(count - 1) },
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(40.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             ) {
-                Icon(Icons.Rounded.Remove, contentDescription = "Remove", modifier = Modifier.size(18.dp))
+                Icon(Icons.Rounded.Remove, contentDescription = "Remove", modifier = Modifier.size(20.dp))
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Text(
                 "$count",
@@ -365,18 +419,18 @@ private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
                 color = WaterCyan,
             )
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             // Plus button
             FilledIconButton(
                 onClick = { onCountChange(count + 1) },
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(40.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(
                     containerColor = WaterCyan,
                     contentColor = Color.White,
                 ),
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -386,35 +440,44 @@ private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
 private fun MealCard(meal: MealEntry) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp), // slightly smaller radius for lists
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Meal type emoji
-            Text(
-                text = meal.mealType.emoji,
-                fontSize = 32.sp,
-            )
+            // Meal type emoji container
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.background),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = meal.mealType.emoji,
+                    fontSize = 28.sp,
+                )
+            }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = meal.mealType.displayName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = meal.items.joinToString(", ") { it.foodName },
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
@@ -423,13 +486,13 @@ private fun MealCard(meal: MealEntry) {
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = "${meal.totalCalories.toInt()}",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = NutriGreen,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
                     text = "kcal",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

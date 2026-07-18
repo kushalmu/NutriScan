@@ -14,6 +14,7 @@ data class UserProfile(
     val healthConditions: List<String> = emptyList(),
     val dietaryPreference: DietaryPreference = DietaryPreference.NON_VEG,
     val city: String = "Mysore",
+    val geminiApiKey: String = "", // Added for Phase 2 AI Scanner
 )
 
 enum class Gender(val displayName: String) {

@@ -2,6 +2,7 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.ksp)
 }
 
 android {
@@ -71,15 +72,38 @@ dependencies {
   // Local tests: jUnit, coroutines, Android runner
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
+  testImplementation("org.robolectric:robolectric:4.11.1")
 
   // Instrumented tests: jUnit rules and runners
+  testImplementation(libs.androidx.test.core)
   androidTestImplementation(libs.androidx.test.core)
   androidTestImplementation(libs.androidx.test.ext.junit)
   androidTestImplementation(libs.androidx.test.runner)
   androidTestImplementation(libs.androidx.test.espresso.core)
 
   // Navigation
-  implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
+  implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+  // CameraX
+  implementation(libs.androidx.camera.camera2)
+  implementation(libs.androidx.camera.lifecycle)
+  implementation(libs.androidx.camera.view)
+
+  // Gemini & Image Loading
+  implementation(libs.generativeai)
+  implementation(libs.coil.compose)
+
+  implementation(libs.androidx.core.ktx)
+
+  // Room
+  implementation(libs.room.runtime)
+  implementation(libs.room.ktx)
+  ksp(libs.room.compiler)
+
+  // ML Kit & Gson
+  implementation(libs.mlkit.image.labeling)
+  implementation(libs.gson)
+  implementation(libs.kotlinx.coroutines.play.services)
 }

@@ -2,39 +2,43 @@ package com.example.nutriscan.theme
 
 import androidx.compose.ui.graphics.Color
 
-// === NutriScan Color Palette ===
-// Fresh, health-focused greens with warm accent colors
+// === NutriScan Claude-Inspired Color Palette ===
+// Soft, minimal, organic colors
 
-// Primary — Fresh Green (health, nature, freshness)
-val NutriGreen = Color(0xFF2E7D32)          // Main green
-val NutriGreenLight = Color(0xFF4CAF50)      // Lighter green
-val NutriGreenDark = Color(0xFF1B5E20)       // Darker green
-val NutriGreenSurface = Color(0xFFE8F5E9)    // Very light green surface
+// Backgrounds & Surfaces
+val SoftBeige = Color(0xFFF9F8F6)        // Main app background
+val SurfaceWhite = Color(0xFFFFFFFF)     // Clean white for cards
+val SurfaceVariant = Color(0xFFF0EBE1)   // Slightly darker beige for contrast
 
-// Secondary — Warm Orange (energy, vitality)
-val NutriOrange = Color(0xFFFF6D00)
-val NutriOrangeLight = Color(0xFFFFAB40)
+// Primary & Accents (Warm & Organic)
+val TerracottaPrimary = Color(0xFFD97757) // Main action color
+val TerracottaLight = Color(0xFFE89A80)
+val OliveGreen = Color(0xFF8B9B7B)        // Success / Health indicator
+val DeepCharcoal = Color(0xFF2C2C2A)      // For main text (softer than pure black)
+val MutedText = Color(0xFF7A7975)         // Secondary text
 
-// Accent colors for nutrition categories
-val CalorieRed = Color(0xFFE53935)           // Calories
-val ProteinBlue = Color(0xFF1E88E5)          // Protein
-val CarbsAmber = Color(0xFFFFB300)           // Carbohydrates
-val FatPurple = Color(0xFF8E24AA)            // Fat
-val FiberGreen = Color(0xFF43A047)           // Fiber
-val WaterCyan = Color(0xFF00ACC1)            // Water intake
+// Dark Theme Variants
+val DarkBackground = Color(0xFF1E1E1C)
+val DarkSurface = Color(0xFF282826)
+val DarkText = Color(0xFFEBEAE7)
+val DarkTerracotta = Color(0xFFC76545)
 
-// Neutral colors
-val NeutralDark = Color(0xFF1A1A2E)
-val NeutralMedium = Color(0xFF4A4A68)
-val NeutralLight = Color(0xFFF0F0F5)
-val NeutralWhite = Color(0xFFFAFAFA)
+// Macro colors (muted and soft)
+val MacroProtein = Color(0xFF8B9B7B)      // Olive
+val MacroCarbs = Color(0xFFDCA774)        // Warm sand
+val MacroFat = Color(0xFFB58484)          // Soft mauve
+val MacroFiber = Color(0xFF90A3AD)        // Slate blue
+val WaterCyan = Color(0xFF7BA6B6)         // Muted cyan
 
-// Dark theme colors
-val DarkSurface = Color(0xFF121212)
-val DarkCard = Color(0xFF1E1E2E)
-val DarkCardElevated = Color(0xFF252540)
-
-// Success / Warning / Error
-val SuccessGreen = Color(0xFF4CAF50)
-val WarningYellow = Color(0xFFFFC107)
-val ErrorRed = Color(0xFFEF5350)
+// Legacy color aliases for other screens to compile with the new theme
+val NutriGreen = TerracottaPrimary
+val NutriGreenDark = DeepCharcoal
+val NutriGreenLight = TerracottaLight
+val NutriGreenSurface = SurfaceVariant
+val NutriOrange = TerracottaPrimary
+val SuccessGreen = OliveGreen
+val ErrorRed = Color(0xFFD95757)
+val CarbsAmber = MacroCarbs
+val ProteinBlue = MacroProtein
+val FatPurple = MacroFat
+val FiberGreen = MacroFiber

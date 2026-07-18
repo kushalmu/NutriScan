@@ -25,17 +25,23 @@ import com.example.nutriscan.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(modifier: Modifier = Modifier) {
-    var name by remember { mutableStateOf("") }
-    var age by remember { mutableStateOf("") }
-    var heightCm by remember { mutableStateOf("") }
-    var weightKg by remember { mutableStateOf("") }
-    var selectedGender by remember { mutableStateOf(Gender.MALE) }
-    var selectedActivity by remember { mutableStateOf(ActivityLevel.MODERATE) }
-    var selectedGoal by remember { mutableStateOf(HealthGoal.MAINTAIN) }
-    var selectedDiet by remember { mutableStateOf(DietaryPreference.NON_VEG) }
-    var city by remember { mutableStateOf("Mysore") }
-    var isEditing by remember { mutableStateOf(true) }
+fun ProfileScreen(
+    modifier: Modifier = Modifier
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val repo = remember { com.example.nutriscan.data.repository.ProfileRepository(context) }
+    
+    var name by remember { mutableStateOf(repo.getName()) }
+    var age by remember { mutableStateOf(repo.getAge()) }
+    var heightCm by remember { mutableStateOf(repo.getHeight()) }
+    var weightKg by remember { mutableStateOf(repo.getWeight()) }
+    var selectedGender by remember { mutableStateOf(repo.getGender()) }
+    var selectedActivity by remember { mutableStateOf(repo.getActivityLevel()) }
+    var selectedGoal by remember { mutableStateOf(repo.getHealthGoal()) }
+    var selectedDiet by remember { mutableStateOf(repo.getDietaryPreference()) }
+    var city by remember { mutableStateOf(repo.getCity()) }
+    
+    var isEditing by remember { mutableStateOf(name.isBlank()) }
     var showSavedMessage by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -110,6 +116,8 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
                 singleLine = true,
             )
         }
+
+
 
         item {
             Row(
@@ -264,8 +272,30 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = {
+                    if (isEditing) {
+                        val ageInt = age.toIntOrNull() ?: 0
+                        val heightFloat = heightCm.toFloatOrNull() ?: 0f
+                        val weightFloat = weightKg.toFloatOrNull() ?: 0f
+
+                        if (ageInt <= 0 || heightFloat <= 0f || weightFloat <= 0f) {
+                            android.widget.Toast.makeText(context, "Please enter valid age, height, and weight (> 0)", android.widget.Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+
+                        repo.saveName(name)
+                        repo.saveAge(age)
+                        repo.saveHeight(heightCm)
+                        repo.saveWeight(weightKg)
+                        repo.saveGender(selectedGender)
+                        repo.saveActivityLevel(selectedActivity)
+                        repo.saveHealthGoal(selectedGoal)
+                        repo.saveDietaryPreference(selectedDiet)
+                        repo.saveCity(city)
+                        showSavedMessage = true
+                    } else {
+                        showSavedMessage = false
+                    }
                     isEditing = !isEditing
-                    if (!isEditing) showSavedMessage = true
                 },
                 modifier = Modifier
                     .fillMaxWidth()
