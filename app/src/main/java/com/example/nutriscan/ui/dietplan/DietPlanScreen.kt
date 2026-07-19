@@ -11,8 +11,11 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Coffee
 import androidx.compose.material.icons.rounded.FreeBreakfast
 import androidx.compose.material.icons.rounded.Nightlight
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.WbTwilight
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +40,8 @@ private data class MealSuggestion(
     val icon: ImageVector,
     val description: String,
     val macros: String,
-    val recommendedTime: String
+    val recommendedTime: String,
+    val calories: Int = macros.replace(Regex("[^0-9]"), "").toIntOrNull() ?: 0
 )
 
 private fun getDietPlan(diet: DietaryPreference, goal: HealthGoal): List<MealSuggestion> {
@@ -68,44 +72,42 @@ private fun getDietPlan(diet: DietaryPreference, goal: HealthGoal): List<MealSug
     }
 }
 
-private fun calculateTDEE(repo: ProfileRepository): Int {
-    val weight = repo.getWeight().toFloatOrNull() ?: 70f
-    val height = repo.getHeight().toFloatOrNull() ?: 170f
-    val age = repo.getAge().toIntOrNull() ?: 25
-    
-    // Mifflin-St Jeor Equation
-    var bmr = (10 * weight) + (6.25f * height) - (5 * age)
-    bmr += if (repo.getGender() == Gender.MALE) 5f else -161f
-    
-    val multiplier = when (repo.getActivityLevel()) {
-        ActivityLevel.SEDENTARY -> 1.2f
-        ActivityLevel.LIGHT -> 1.375f
-        ActivityLevel.MODERATE -> 1.55f
-        ActivityLevel.ACTIVE -> 1.725f
-        ActivityLevel.EXTRA_ACTIVE -> 1.9f
-    }
-    
-    var tdee = (bmr * multiplier).toInt()
-    
-    tdee += when (repo.getHealthGoal()) {
-        HealthGoal.LOSE -> -500
-        HealthGoal.GAIN -> 500
-        HealthGoal.MAINTAIN -> 0
-    }
-    
-    return tdee
-}
-
 @Composable
 fun DietPlanScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val repo = remember { ProfileRepository(context) }
+    val db = remember { com.example.nutriscan.data.local.AppDatabase.getDatabase(context) }
+    val coroutineScope = rememberCoroutineScope()
     
     val goal = repo.getHealthGoal()
     val diet = repo.getDietaryPreference()
-    val plan = remember(goal, diet) { getDietPlan(diet, goal) }
-    val tdee = remember { calculateTDEE(repo) }
+    val todayDateString = remember { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()) }
+    
+    val initialPlan = remember(goal, diet) { 
+        val basePlan = getDietPlan(diet, goal)
+        // Apply saved custom replacements
+        basePlan.mapIndexed { index, meal ->
+            val replacement = repo.getDietPlanReplacement(todayDateString, index)
+            if (replacement != null) {
+                meal.copy(
+                    title = replacement.first,
+                    macros = "${replacement.second} kcal",
+                    calories = replacement.second,
+                    description = replacement.third
+                )
+            } else {
+                meal
+            }
+        }
+    }
+    
+    var plan by remember(initialPlan) { mutableStateOf(initialPlan) }
+    
+    val tdee = remember { repo.getTargetCalories().toInt() }
+    val currentPlanCalories = plan.sumOf { it.calories }
     val targetProtein = remember(tdee) { (tdee * 0.25f / 4f).toInt() }
+    
+    var indexToReplace by remember { mutableStateOf<Int?>(null) }
     
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -156,9 +158,9 @@ fun DietPlanScreen(modifier: Modifier = Modifier) {
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    PlanStatItem("Calories", "$tdee", "kcal")
-                    PlanStatItem("Protein", "$targetProtein", "g")
-                    PlanStatItem("Meals", "${plan.size}", "today")
+                    PlanStatItem("Target (kcal)", "$tdee", "")
+                    PlanStatItem("Plan (kcal)", "$currentPlanCalories", "")
+                    PlanStatItem("Meals", "${plan.size}", "")
                 }
             }
         }
@@ -174,13 +176,42 @@ fun DietPlanScreen(modifier: Modifier = Modifier) {
 
         // Meal suggestions
         items(plan.size) { index ->
-            MealSuggestionCard(plan[index])
+            MealSuggestionCard(
+                meal = plan[index],
+                onReplaceClick = { indexToReplace = index }
+            )
         }
 
         // Bottom spacer
         item {
             Spacer(modifier = Modifier.height(80.dp))
         }
+    }
+
+    if (indexToReplace != null) {
+        ReplaceFoodDialog(
+            db = db,
+            onDismiss = { indexToReplace = null },
+            onFoodSelected = { foodItem ->
+                val idx = indexToReplace!!
+                val oldMeal = plan[idx]
+                val replacementDescription = "Custom substitution: ${foodItem.regionalName}"
+                val newMeal = oldMeal.copy(
+                    title = foodItem.foodName,
+                    macros = "${foodItem.calories.toInt()} kcal",
+                    calories = foodItem.calories.toInt(),
+                    description = replacementDescription
+                )
+                
+                // Persist the replacement
+                repo.saveDietPlanReplacement(todayDateString, idx, foodItem.foodName, foodItem.calories.toInt(), replacementDescription)
+                
+                val newList = plan.toMutableList()
+                newList[idx] = newMeal
+                plan = newList
+                indexToReplace = null
+            }
+        )
     }
 }
 
@@ -202,7 +233,7 @@ private fun PlanStatItem(label: String, value: String, unit: String) {
 }
 
 @Composable
-private fun MealSuggestionCard(meal: MealSuggestion) {
+private fun MealSuggestionCard(meal: MealSuggestion, onReplaceClick: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     
     Card(
@@ -216,64 +247,172 @@ private fun MealSuggestionCard(meal: MealSuggestion) {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         onClick = { expanded = !expanded }
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.Top,
+                .padding(16.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    meal.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        meal.icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
 
-            Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(16.dp))
 
-            // Food details
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    meal.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    meal.time,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (expanded) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                // Food details
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        meal.description,
-                        style = MaterialTheme.typography.bodySmall,
+                        meal.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        meal.time,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (expanded) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            meal.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                // Calories badge
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(NutriGreenSurface)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        meal.macros,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NutriGreen,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
 
-            // Calories badge
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(NutriGreenSurface)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            ) {
-                Text(
-                    meal.macros,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = NutriGreen,
-                    fontWeight = FontWeight.SemiBold,
+            if (expanded) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    OutlinedButton(onClick = onReplaceClick) {
+                        Text("Replace Item")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReplaceFoodDialog(
+    db: com.example.nutriscan.data.local.AppDatabase,
+    onDismiss: () -> Unit,
+    onFoodSelected: (com.example.nutriscan.data.local.FoodItemEntity) -> Unit
+) {
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<com.example.nutriscan.data.local.FoodItemEntity>>(emptyList()) }
+
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isNotBlank()) {
+            kotlinx.coroutines.delay(300)
+            val results = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                db.mealDao().searchFoodItemsList(searchQuery)
+            }
+            searchResults = results
+        } else {
+            searchResults = emptyList()
+        }
+    }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                TopAppBar(
+                    title = { Text("Replace Food", fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Close")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
                 )
+
+                Column(modifier = Modifier.padding(16.dp)) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search food (e.g. Dosa)") },
+                        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                        shape = RoundedCornerShape(16.dp),
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { keyboardController?.hide() })
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (searchQuery.isNotBlank() && searchResults.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No foods found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(searchResults.size) { index ->
+                                val food = searchResults[index]
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { 
+                                            keyboardController?.hide()
+                                            onFoodSelected(food)
+                                        },
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(food.foodName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                            Text(food.regionalName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Text("${food.calories.toInt()} kcal", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

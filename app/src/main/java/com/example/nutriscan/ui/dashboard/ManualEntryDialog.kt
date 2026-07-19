@@ -59,9 +59,10 @@ fun ManualEntryDialog(onDismiss: () -> Unit) {
         }
     }
 
-    // Automatically search when query changes
+    // Automatically search when query changes with debouncing
     LaunchedEffect(searchQuery) {
         if (searchQuery.isNotBlank()) {
+            kotlinx.coroutines.delay(300) // Debounce typing by 300ms
             val results = withContext(Dispatchers.IO) {
                 db.mealDao().searchFoodItemsList(searchQuery)
             }

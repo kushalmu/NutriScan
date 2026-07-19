@@ -267,6 +267,85 @@ fun ProfileScreen(
             }
         }
 
+        // --- New Personalization Settings ---
+        item {
+            SectionHeader("Personalization")
+        }
+        
+        item {
+            var isManualCalorie by remember { mutableStateOf(repo.isCalorieTargetManual()) }
+            var manualCalorieText by remember { mutableStateOf(repo.getManualCalorieTarget().toInt().toString()) }
+            var waterGoalText by remember { mutableStateOf(repo.getDailyWaterGoal().toString()) }
+
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Calorie Target Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Manual Calorie Target",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "Override automatically calculated BMR target",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isManualCalorie,
+                        onCheckedChange = { 
+                            if (isEditing) {
+                                isManualCalorie = it
+                                repo.setCalorieTargetManual(it)
+                            }
+                        },
+                        enabled = isEditing
+                    )
+                }
+
+                if (isManualCalorie) {
+                    OutlinedTextField(
+                        value = manualCalorieText,
+                        onValueChange = { 
+                            manualCalorieText = it.filter { c -> c.isDigit() }
+                            val cals = manualCalorieText.toFloatOrNull()
+                            if (cals != null && cals > 0) {
+                                repo.setManualCalorieTarget(cals)
+                            }
+                        },
+                        label = { Text("Target Calories (kcal)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        enabled = isEditing,
+                        singleLine = true,
+                    )
+                }
+
+                OutlinedTextField(
+                    value = waterGoalText,
+                    onValueChange = { 
+                        waterGoalText = it.filter { c -> c.isDigit() }
+                        val goal = waterGoalText.toIntOrNull()
+                        if (goal != null && goal > 0) {
+                            repo.setDailyWaterGoal(goal)
+                        }
+                    },
+                    label = { Text("Daily Water Goal (Glasses)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    enabled = isEditing,
+                    singleLine = true,
+                )
+            }
+        }
+
         // Save Button
         item {
             Spacer(modifier = Modifier.height(8.dp))

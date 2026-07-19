@@ -51,12 +51,9 @@ fun DashboardScreen(
 
     val repo = remember { com.example.nutriscan.data.repository.ProfileRepository(context) }
     
-    // Simple BMR target calculation based on profile
-    val weight = repo.getWeight().toFloatOrNull() ?: 70f
-    val height = repo.getHeight().toFloatOrNull() ?: 170f
-    val age = repo.getAge().toIntOrNull() ?: 30
-    val bmr = (10 * weight) + (6.25f * height) - (5 * age) + 5
-    val targetCalories = bmr * 1.2f
+    val targetCalories = repo.getTargetCalories()
+
+    val dailyWaterGoal = repo.getDailyWaterGoal()
 
     val dailySummary = DailySummary(
         date = todayDateString,
@@ -96,7 +93,11 @@ fun DashboardScreen(
 
         // Water Tracker
         item {
-            WaterTrackerCard(waterCount) { newCount -> waterCount = newCount }
+            WaterTrackerCard(
+                count = waterCount, 
+                goal = dailyWaterGoal, 
+                onCountChange = { waterCount = it }
+            )
         }
 
         // Quick Actions
@@ -379,14 +380,24 @@ private fun MacroBreakdownCard(summary: DailySummary) {
             )
             Spacer(modifier = Modifier.height(20.dp))
 
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                MacroItem("Protein", summary.totalProtein, "g", MacroProtein, targetG = 60f)
-                MacroItem("Carbs", summary.totalCarbs, "g", MacroCarbs, targetG = 250f)
-                MacroItem("Fat", summary.totalFat, "g", MacroFat, targetG = 65f)
-                MacroItem("Fiber", summary.totalFiber, "g", MacroFiber, targetG = 30f)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    MacroItem("Protein", summary.totalProtein, "g", MacroProtein, targetG = 60f)
+                    MacroItem("Carbs", summary.totalCarbs, "g", MacroCarbs, targetG = 250f)
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    MacroItem("Fat", summary.totalFat, "g", MacroFat, targetG = 65f)
+                    MacroItem("Fiber", summary.totalFiber, "g", MacroFiber, targetG = 30f)
+                }
             }
         }
     }
@@ -449,7 +460,7 @@ private fun MacroItem(name: String, amount: Float, unit: String, color: Color, t
 }
 
 @Composable
-private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
+private fun WaterTrackerCard(count: Int, goal: Int, onCountChange: (Int) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(32.dp),
@@ -464,18 +475,35 @@ private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
                 .padding(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val fillPercentage by animateFloatAsState(
+                targetValue = (count.toFloat() / goal.toFloat()).coerceIn(0f, 1f),
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                ),
+                label = "water_fill"
+            )
+
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(64.dp)
                     .clip(CircleShape)
                     .background(WaterCyan.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center,
+                contentAlignment = Alignment.BottomCenter
             ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(fillPercentage)
+                        .background(WaterCyan)
+                )
                 Icon(
                     Icons.Rounded.LocalDrink,
                     contentDescription = "Water",
-                    tint = WaterCyan,
-                    modifier = Modifier.size(32.dp),
+                    tint = if (fillPercentage > 0.5f) Color.White else WaterCyan,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .align(Alignment.Center)
                 )
             }
 
@@ -488,7 +516,7 @@ private fun WaterTrackerCard(count: Int, onCountChange: (Int) -> Unit) {
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    "$count / 8 glasses",
+                    "$count / $goal glasses",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
