@@ -38,6 +38,9 @@ android {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
       }
     }
+    androidResources {
+        noCompress += "tflite"
+    }
 }
 
 kotlin {
@@ -102,8 +105,9 @@ dependencies {
   implementation(libs.room.ktx)
   ksp(libs.room.compiler)
 
-  // ML Kit & Gson
-  implementation(libs.mlkit.image.labeling)
+  // TensorFlow Lite
+  implementation("org.tensorflow:tensorflow-lite:2.16.1")
+  implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
   implementation(libs.gson)
   implementation(libs.kotlinx.coroutines.play.services)
 }

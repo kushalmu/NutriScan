@@ -68,7 +68,7 @@ fun ScannerScreen(
 
     var scannerState by remember { mutableStateOf(ScannerState.IDLE) }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var scanResult by remember { mutableStateOf<NutritionInfo?>(null) }
+    var scanResult by remember { mutableStateOf<com.example.nutriscan.data.network.FoodPredictionResult?>(null) }
     var errorMessage by remember { mutableStateOf("") }
     
     var showManualEntry by remember { mutableStateOf(false) }
@@ -210,28 +210,23 @@ fun ScannerScreen(
                             Icon(
                                 Icons.Rounded.Search,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(48.dp)
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "Food Not Recognized",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                errorMessage,
+                                "Automatic food recognition is currently being improved.",
                                 textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(24.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                OutlinedButton(onClick = { showManualEntry = true }) {
-                                    Text("Add Manually")
+                                Button(onClick = { showManualEntry = true }) {
+                                    Text("Choose manually")
                                 }
-                                Button(onClick = { scannerState = ScannerState.IDLE }) {
-                                    Text("Try Again")
+                                OutlinedButton(onClick = { scannerState = ScannerState.IDLE }) {
+                                    Text("Cancel")
                                 }
                             }
                         }
@@ -246,36 +241,94 @@ fun ScannerScreen(
         AnimatedContent(targetState = scannerState == ScannerState.RESULT, label = "") { isResult ->
             if (isResult && scanResult != null) {
                 val db = remember { com.example.nutriscan.data.local.AppDatabase.getDatabase(context) }
-                NutritionResultCard(
-                    nutritionInfo = scanResult!!,
-                    onAccept = {
-                        coroutineScope.launch {
-                            try {
-                                val mealEntity = com.example.nutriscan.data.local.MealEntity(
-                                    id = java.util.UUID.randomUUID().toString(),
-                                    timestamp = System.currentTimeMillis(),
-                                    dateString = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()),
-                                    mealType = com.example.nutriscan.data.model.MealType.LUNCH.name, // Hardcoded for now
-                                    itemsJson = com.google.gson.Gson().toJson(listOf(scanResult)),
-                                    isAiAnalyzed = true
-                                )
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    db.mealDao().insertMeal(mealEntity)
+                val prediction = scanResult!!
+                
+                if (prediction.confidence > 0.5f && prediction.nutritionInfo != null) {
+                    // High confidence
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Most likely: ${prediction.predictedName} (${(prediction.confidence * 100).toInt()}% confidence)",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                        NutritionResultCard(
+                            nutritionInfo = prediction.nutritionInfo,
+                            onAccept = {
+                                coroutineScope.launch {
+                                    try {
+                                        val mealEntity = com.example.nutriscan.data.local.MealEntity(
+                                            id = java.util.UUID.randomUUID().toString(),
+                                            timestamp = System.currentTimeMillis(),
+                                            dateString = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()),
+                                            mealType = com.example.nutriscan.data.model.MealType.LUNCH.name, // Hardcoded for now
+                                            itemsJson = com.google.gson.Gson().toJson(listOf(prediction.nutritionInfo)),
+                                            isAiAnalyzed = true
+                                        )
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            db.mealDao().insertMeal(mealEntity)
+                                        }
+                                        android.widget.Toast.makeText(context, "Meal saved successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Failed to save meal.", android.widget.Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        scannerState = ScannerState.IDLE
+                                        scanResult = null
+                                    }
                                 }
-                                android.widget.Toast.makeText(context, "Meal saved successfully!", android.widget.Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                android.widget.Toast.makeText(context, "Failed to save meal.", android.widget.Toast.LENGTH_SHORT).show()
-                            } finally {
+                            },
+                            onDiscard = {
                                 scannerState = ScannerState.IDLE
                                 scanResult = null
                             }
-                        }
-                    },
-                    onDiscard = {
-                        scannerState = ScannerState.IDLE
-                        scanResult = null
+                        )
                     }
-                )
+                } else {
+                    // Low confidence or missing nutrition info
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "Not confident enough to identify this food.",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            Text("Top alternative predictions:", fontWeight = FontWeight.Bold)
+                            val allPredictions = listOf(prediction.predictedName to prediction.confidence) + prediction.alternatives
+                            allPredictions.take(3).forEach { (altName, altConf) ->
+                                Text("- $altName (${(altConf * 100).toInt()}%)")
+                            }
+                            
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                OutlinedButton(onClick = { 
+                                    scannerState = ScannerState.IDLE
+                                    scanResult = null
+                                }) {
+                                    Text("Try another image")
+                                }
+                                Button(onClick = { 
+                                    showManualEntry = true
+                                    scannerState = ScannerState.IDLE
+                                    scanResult = null
+                                }) {
+                                    Text("Choose manually")
+                                }
+                            }
+                        }
+                    }
+                }
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
